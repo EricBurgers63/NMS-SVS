@@ -75,7 +75,7 @@ inline status() {
 
 
 
-// Sluis proces
+// Verificatiemodel voor Sluis subsysteem
 proctype NMS() {
     BTI_signals iir;  // input image register
     NMS_signals oir;  // output image register
@@ -252,6 +252,10 @@ proctype NMS() {
 }
 
 
+// verificatiemodel voor SVS subsysteem
+proctype SVS() {
+    
+}
 
 init {
     atomic {

@@ -43,7 +43,7 @@ byte zb_svs;
 // Richtingen waarin een schutting/draai kan plaastvinden
 #define NOORD_ZUID 1
 #define ZUID_NOORD 2
-#define GEEN_RICHTING 3
+#define GEEN_RICHTING 0
 
 // Sluis toestanden
 #define S_GESPERD               0
@@ -53,7 +53,51 @@ byte zb_svs;
 #define S_INVAREN_VERBIEDEN     4
 #define S_UITVAREN_TOEGESTAAN   5
 #define S_UITVAREN_VERBIEDEN    6
+#define S_STORING               7
 
+
+inline vaarrichting(richting){
+    if
+    ::richting == NOORD_ZUID -> printf("NZ");
+    ::richting == ZUID_NOORD -> printf("ZN")
+    ::else -> printf("--");
+    fi
+
+}
+
+inline beeldk(sein){
+    if
+    ::sein == GEENDOORVAART -> printf("Rx");
+    ::sein == DOORVAART -> printf("xG")
+    ::else -> printf("--");
+    fi
+}
+
+inline beeld(sein){
+    if
+    ::sein == SPER -> printf("RxR");
+    ::sein == GEENDOORVAART -> printf("Rxx");
+    ::sein == AANSTONDSDOORVAART -> printf("RGx");
+    ::sein == DOORVAART -> printf("xGx");
+    ::else -> printf("---");
+    fi
+}
+
+inline seinbeelden() {
+    beeld(n_svs);
+    beeldk(n_kolk);
+    beeldk(z_kolk);
+    beeld(nb_svs);
+    beeld(z_svs);
+    beeld(zb_svs);
+}
+
+inline storing(status) {
+    if
+    :: status == S_STORING -> printf("S");
+    :: status != S_STORING -> printf(" ");
+    fi
+}
 
 // helper functie om de status van seinen en interlock te presenteren
 // de seinen worden gepresenteerd in de volgorde van nood naar zuid, per 
@@ -87,18 +131,21 @@ proctype NMS() {
     int mijnrichting = GEEN_RICHTING;
     int sluistoestand = S_GESPERD;
 
-    // Opstarten:
-    // SYS-10731: SluisGeenDoorvaart XOR SluisGereedVoorDoorvaartNZ XOR SluisGereedVoorDoorvaartZN == TRUE
-    // Aanname: Sluis start op in SPER. 
-
-    
+    if // kies een (random) richting
+    :: true -> {
+        mijnrichting = ZUID_NOORD;
+    }
+    :: true -> {
+        mijnrichting = NOORD_ZUID;
+    }   
+    fi
 
     // PLC Cyclus
     do
     :: true -> {
         if
         :: plc_step == 0 -> {
-            atomic { // input fase
+            d_step {
                 iir.BrugGeenDoorvaart =             bti_output.BrugGeenDoorvaart;
                 iir.BrugGereedVoorDoorvaartNZ =     bti_output.BrugGereedVoorDoorvaartNZ;
                 iir.BrugGereedVoorDoorvaartZN =     bti_output.BrugGereedVoorDoorvaartZN;
@@ -109,140 +156,192 @@ proctype NMS() {
         :: plc_step == 1 -> { // Verwerkingsfase
             if
                 :: sluistoestand == S_GESPERD -> {
-                    oir.SluisGeenDoorvaart = true;
-                    oir.SluisGereedVoorDoorvaartNZ = false;
-                    oir.SluisGereedVoorDoorvaartZN = false;
-                    oir.SluisMeldstoring = false;
-                    n_svs = SPER;
-                    n_kolk = GEENDOORVAART;
-                    z_kolk = GEENDOORVAART;
-                    z_svs = SPER;
+                    d_step {
+                        oir.SluisGeenDoorvaart = true;
+                        oir.SluisGereedVoorDoorvaartNZ = false;
+                        oir.SluisGereedVoorDoorvaartZN = false;
+                        oir.SluisMeldstoring = false;
+                        n_svs = SPER;
+                        n_kolk = GEENDOORVAART;
+                        z_kolk = GEENDOORVAART;
+                        z_svs = SPER;
+                    }
                 }
                 :: sluistoestand == S_GEEN_DOORVAART -> {
-                    oir.SluisGeenDoorvaart = true;
-                    oir.SluisGereedVoorDoorvaartNZ = false;
-                    oir.SluisGereedVoorDoorvaartZN = false;
-                    oir.SluisMeldstoring = false;
-                    n_svs = GEENDOORVAART;
-                    n_kolk = GEENDOORVAART;
-                    z_kolk = GEENDOORVAART;
-                    z_svs = GEENDOORVAART;
+                    d_step {
+                        oir.SluisGeenDoorvaart = true;
+                        oir.SluisGereedVoorDoorvaartNZ = false;
+                        oir.SluisGereedVoorDoorvaartZN = false;
+                        oir.SluisMeldstoring = false;
+                        n_svs = GEENDOORVAART;
+                        n_kolk = GEENDOORVAART;
+                        z_kolk = GEENDOORVAART;
+                        z_svs = GEENDOORVAART;
+                    }
                 }
                 :: sluistoestand == S_AANSTONDS_DOORVAART -> {
-                    oir.SluisGeenDoorvaart = true;
-                    oir.SluisGereedVoorDoorvaartNZ = false;
-                    oir.SluisGereedVoorDoorvaartZN = false;
-                    oir.SluisMeldstoring = false;
-                    n_svs = GEENDOORVAART;
-                    n_kolk = GEENDOORVAART;
-                    z_kolk = GEENDOORVAART;
-                    z_svs = GEENDOORVAART;
-                    if
-                    :: mijnrichting == NOORD_ZUID -> n_svs = AANSTONDSDOORVAART;
-                    :: mijnrichting == ZUID_NOORD -> z_svs = AANSTONDSDOORVAART;
-                    :: else -> skip;
-                    fi
+                    d_step {
+                        oir.SluisGeenDoorvaart = true;
+                        oir.SluisGereedVoorDoorvaartNZ = false;
+                        oir.SluisGereedVoorDoorvaartZN = false;
+                        oir.SluisMeldstoring = false;
+                        n_svs = GEENDOORVAART;
+                        n_kolk = GEENDOORVAART;
+                        z_kolk = GEENDOORVAART;
+                        z_svs = GEENDOORVAART;
+                        if
+                        :: mijnrichting == NOORD_ZUID -> n_svs = AANSTONDSDOORVAART;
+                        :: mijnrichting == ZUID_NOORD -> z_svs = AANSTONDSDOORVAART;
+                        :: else -> skip;
+                        fi
+                    }
                 }
                 :: sluistoestand == S_INVAREN_TOEGESTAAN -> {
-                    oir.SluisGeenDoorvaart = true;
-                    oir.SluisGereedVoorDoorvaartNZ = false;
-                    oir.SluisGereedVoorDoorvaartZN = false;
-                    oir.SluisMeldstoring = false;
-                    n_svs = GEENDOORVAART;
-                    n_kolk = GEENDOORVAART;
-                    z_kolk = GEENDOORVAART;
-                    z_svs = GEENDOORVAART;
-                    if
-                    :: mijnrichting == NOORD_ZUID -> n_svs = DOORVAART;
-                    :: mijnrichting ==  ZUID_NOORD -> {
-                        z_svs = DOORVAART;
-                        oir.SluisGereedVoorDoorvaartZN = true;
-                        oir.SluisGeenDoorvaart = false;
+                    d_step {
+                        oir.SluisGeenDoorvaart = true;
+                        oir.SluisGereedVoorDoorvaartNZ = false;
+                        oir.SluisGereedVoorDoorvaartZN = false;
+                        oir.SluisMeldstoring = false;
+                        n_svs = GEENDOORVAART;
+                        n_kolk = GEENDOORVAART;
+                        z_kolk = GEENDOORVAART;
+                        z_svs = GEENDOORVAART;
+                        if
+                        :: mijnrichting == NOORD_ZUID -> n_svs = DOORVAART;
+                        :: mijnrichting ==  ZUID_NOORD -> {
+                            z_svs = DOORVAART;
+                            oir.SluisGereedVoorDoorvaartZN = true;
+                            oir.SluisGeenDoorvaart = false;
+                        }
+                        :: else -> skip;
+                        fi
                     }
-                    :: else -> skip;
-                    fi
                 }
                 :: sluistoestand == S_INVAREN_VERBIEDEN -> {
-                    oir.SluisGeenDoorvaart = true;
-                    oir.SluisGereedVoorDoorvaartNZ = false;
-                    oir.SluisGereedVoorDoorvaartZN = false;
-                    oir.SluisMeldstoring = false;
-                    n_svs = GEENDOORVAART;
-                    n_kolk = GEENDOORVAART;
-                    z_kolk = GEENDOORVAART;
-                    z_svs = GEENDOORVAART;
+                    d_step {
+                        oir.SluisGeenDoorvaart = true;
+                        oir.SluisGereedVoorDoorvaartNZ = false;
+                        oir.SluisGereedVoorDoorvaartZN = false;
+                        oir.SluisMeldstoring = false;
+                        n_svs = GEENDOORVAART;
+                        n_kolk = GEENDOORVAART;
+                        z_kolk = GEENDOORVAART;
+                        z_svs = GEENDOORVAART;
+                    }
                 }
                 :: sluistoestand == S_UITVAREN_TOEGESTAAN -> {
-                    oir.SluisGeenDoorvaart = true;
-                    oir.SluisGereedVoorDoorvaartNZ = false;
-                    oir.SluisGereedVoorDoorvaartZN = false;
-                    oir.SluisMeldstoring = false;
-                    n_svs = GEENDOORVAART;
-                    n_kolk = GEENDOORVAART;
-                    z_kolk = GEENDOORVAART;
-                    z_svs = GEENDOORVAART;
-                    if
-                    :: mijnrichting ==  NOORD_ZUID -> {
-                        z_kolk = DOORVAART;
-                        oir.SluisGereedVoorDoorvaartNZ = true;
-                        oir.SluisGeenDoorvaart = false;
+                    d_step {
+                        oir.SluisGeenDoorvaart = true;
+                        oir.SluisGereedVoorDoorvaartNZ = false;
+                        oir.SluisGereedVoorDoorvaartZN = false;
+                        oir.SluisMeldstoring = false;
+                        n_svs = GEENDOORVAART;
+                        n_kolk = GEENDOORVAART;
+                        z_kolk = GEENDOORVAART;
+                        z_svs = GEENDOORVAART;
+                        if
+                        :: mijnrichting ==  NOORD_ZUID -> {
+                            z_kolk = DOORVAART;
+                            oir.SluisGereedVoorDoorvaartNZ = true;
+                            oir.SluisGeenDoorvaart = false;
+                        }
+                        :: mijnrichting == ZUID_NOORD -> n_kolk = DOORVAART;
+                        :: else -> skip;
+                        fi
                     }
-                    :: mijnrichting == ZUID_NOORD -> n_kolk = DOORVAART;
-                    :: else -> skip;
-                    fi
                 }
                 :: sluistoestand == S_UITVAREN_VERBIEDEN -> {
-                    oir.SluisGeenDoorvaart = true;
-                    oir.SluisGereedVoorDoorvaartNZ = false;
-                    oir.SluisGereedVoorDoorvaartZN = false;
-                    oir.SluisMeldstoring = false;
-                    n_svs = GEENDOORVAART;
-                    n_kolk = GEENDOORVAART;
-                    z_kolk = GEENDOORVAART;
-                    z_svs = GEENDOORVAART;
-                    if
-                    :: mijnrichting == NOORD_ZUID -> z_kolk = GEENDOORVAART;
-                    :: mijnrichting = ZUID_NOORD -> n_kolk = GEENDOORVAART;
-                    :: else -> skip;
-                    fi
+                    d_step {
+                        oir.SluisGeenDoorvaart = true;
+                        oir.SluisGereedVoorDoorvaartNZ = false;
+                        oir.SluisGereedVoorDoorvaartZN = false;
+                        oir.SluisMeldstoring = false;
+                        n_svs = GEENDOORVAART;
+                        n_kolk = GEENDOORVAART;
+                        z_kolk = GEENDOORVAART;
+                        z_svs = GEENDOORVAART;
+                        if
+                        :: mijnrichting == NOORD_ZUID -> z_kolk = GEENDOORVAART;
+                        :: mijnrichting == ZUID_NOORD -> n_kolk = GEENDOORVAART;
+                        :: else -> skip;
+                        fi
+                    }
                 }
+                :: sluistoestand == S_STORING -> {
+                    d_step {
+                        oir.SluisGeenDoorvaart = false;
+                        oir.SluisGereedVoorDoorvaartNZ = false;
+                        oir.SluisGereedVoorDoorvaartZN = false;
+                        oir.SluisMeldstoring = true;
+                        n_svs = SPER;
+                        n_kolk = GEENDOORVAART;
+                        z_kolk = GEENDOORVAART;
+                        z_svs = SPER;
+                    }
+                }
+
             fi
         }
         :: plc_step == 2 -> {
-            atomic { // output fase
+            d_step { // output fase
                 nms_output.SluisGeenDoorvaart =         oir.SluisGeenDoorvaart;
                 nms_output.SluisGereedVoorDoorvaartNZ = oir.SluisGereedVoorDoorvaartNZ;
                 nms_output.SluisGereedVoorDoorvaartZN = oir.SluisGereedVoorDoorvaartZN;
                 nms_output.SluisMeldstoring =           oir.SluisMeldstoring;
+                storing(sluistoestand);
+                vaarrichting(mijnrichting);
+                seinbeelden();
+                printf("\n");
             }
         }
         :: plc_step == 3 -> { // Huishouding
-            if
-            :: opdracht_step == 0 ->{
-                if // kies een (random) richting
-                :: true -> mijnrichting = NOORD_ZUID;
-                :: true -> mijnrichting = ZUID_NOORD;
+            if // Bepaal (random) of sluis in storing gaat
+            :: true -> skip;
+            :: true -> sluistoestand = S_STORING;
+            fi
+            d_step {
+                if
+                :: sluistoestand != S_STORING -> {
+                    if
+                    :: opdracht_step == 0 -> {
+                        if // wissel van richting
+                        :: mijnrichting == NOORD_ZUID -> mijnrichting = ZUID_NOORD;
+                        :: mijnrichting == ZUID_NOORD -> mijnrichting = NOORD_ZUID;
+                        fi
+                    }
+                    :: opdracht_step == 1 -> sluistoestand = S_INVAREN_VERBIEDEN;
+                    :: opdracht_step == 2 -> sluistoestand = S_INVAREN_TOEGESTAAN;
+                    :: opdracht_step == 3 -> sluistoestand = S_INVAREN_VERBIEDEN;
+                    :: opdracht_step == 4 -> sluistoestand = S_UITVAREN_TOEGESTAAN;
+                    :: opdracht_step == 5 -> sluistoestand = S_UITVAREN_VERBIEDEN;
+                    :: opdracht_step == 6 -> sluistoestand = S_GEEN_DOORVAART;
+                    // :: opdracht_step == 7 -> sluistoestand = S_GESPERD;
+                    fi
+                    opdracht_count++;
+                    opdracht_step = opdracht_count % 7;
+                }
+                :: else -> skip
                 fi
             }
-            :: opdracht_step == 1 -> sluistoestand = S_INVAREN_TOEGESTAAN;
-            :: opdracht_step == 2 -> sluistoestand = S_INVAREN_VERBIEDEN;
-            :: opdracht_step == 3 -> sluistoestand = S_UITVAREN_TOEGESTAAN;
-            :: opdracht_step == 4 -> sluistoestand = S_UITVAREN_VERBIEDEN;
-            :: opdracht_step == 5 -> sluistoestand = S_GEEN_DOORVAART;
+            if // Bepaal (random) of sluis UIT storing gaat
+            :: sluistoestand == S_STORING -> skip;
+            :: sluistoestand == S_STORING -> {
+                opdracht_count = 0;
+                opdracht_step = opdracht_count % 7;
+                sluistoestand = S_GESPERD;
+            }
+            :: else -> skip;
             fi
-            // selectie voor de volgende opdracht
-            opdracht_count++;
-            opdracht_step = opdracht_count % 6;
         }
         fi
 
-        atomic {
+        d_step {
             count++;
             plc_step = count % 4;
         }
         if
-        :: count > 10000 -> {
-            printf("END\n")
+        :: count > 20000 -> {
+            printf("END \n")
             break; // voor testen, alleen 10000 plc cycles
         }
         :: else -> skip;
@@ -253,9 +352,6 @@ proctype NMS() {
 
 
 // verificatiemodel voor SVS subsysteem
-proctype SVS() {
-    
-}
 
 init {
     atomic {

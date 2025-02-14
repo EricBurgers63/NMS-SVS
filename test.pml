@@ -1,21 +1,23 @@
-mtype = { MESSAGE }; // Definitie van het berichttype
 
-chan channel = [0] of { mtype }; // Kanaal met een buffer van 1 bericht
+proctype numberrunner() {
+    int teller = 0
 
-proctype Sender() {
-    mtype msg = MESSAGE; // Maak een bericht aan
-    printf("Zender: Verzenden van bericht...\n");
-    channel!msg; // Stuur het bericht naar het kanaal
-    printf("Zender: Bericht verzonden.\n");
-}
-
-proctype Receiver() {
-    mtype received_msg;
-    channel?received_msg; // Ontvang bericht van het kanaal
-    printf("Ontvanger: Bericht ontvangen.\n");
+    do
+    :: true -> {
+        d_step {
+            if
+            ::true -> teller++;
+            ::true -> teller--;
+            fi
+        }
+        printf("%d\n", teller);
+    }
+    :: teller > 1000 -> break;
+    :: teller < -1000 -> break;
+    
+    od
 }
 
 init {
-    run Sender();  // Start de zender
-    run Receiver(); // Start de ontvanger
+    run numberrunner();  // Start de zender
 }

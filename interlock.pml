@@ -37,7 +37,8 @@ byte z_kolk;
 // De seinen van de Brug, vereenvoudigd
 byte nb_svs;
 byte zb_svs;
-
+byte n_ovds;
+byte z_ovds;
 
 
 // Richtingen waarin een schutting/draai kan plaastvinden
@@ -56,6 +57,18 @@ byte zb_svs;
 #define S_STORING               7
 
 
+// Bruggen toestanden
+#define B_GESPERD               0
+#define B_GEEN_DOORVAART        1
+#define B_AANSTONDS_DOORVAART   2
+#define B_DOORVAART             3
+#define B_STORING               7
+
+
+inline plc( step ){
+    printf("PLC: %d\n", step );
+}
+
 inline vaarrichting(richting){
     if
     ::richting == NOORD_ZUID -> printf("NZ");
@@ -63,6 +76,14 @@ inline vaarrichting(richting){
     ::else -> printf("--");
     fi
 
+}
+
+inline beeldovds(sein){
+    if
+    ::sein == GEENDOORVAART -> printf("Gx");
+    ::sein == DOORVAART -> printf("GG")
+    ::else -> printf("--");
+    fi
 }
 
 inline beeldk(sein){
@@ -102,8 +123,8 @@ inline storing(status) {
 // helper functie om de status van seinen en interlock te presenteren
 // de seinen worden gepresenteerd in de volgorde van nood naar zuid, per 
 // nautisch object.
-inline status() {
-    printf( "RKVL(S): %d %d %d %d\tRKVL(B): %d %d %d %d %d\tSVS(B): %d %d\tSVS(S) %d %d %d %d\n", 
+inline rkvl() {
+    printf( "(S): %d %d %d %d\t(B): %d %d %d %d %d", 
         nms_output.SluisGeenDoorvaart,
         nms_output.SluisGereedVoorDoorvaartNZ,
         nms_output.SluisGereedVoorDoorvaartZN,
@@ -112,14 +133,12 @@ inline status() {
         bti_output.BrugGereedVoorDoorvaartNZ,
         bti_output.BrugGereedVoorDoorvaartZN,
         bti_output.BrugGereedVoorOnderdoorvaart,
-        bti_output.BrugMeldstoring,
-        nb_svs, zb_svs, n_svs, n_kolk, z_kolk,  z_svs
-        );
+        bti_output.BrugMeldstoring );
 }
 
 
 
-// Verificatiemodel voor Sluis subsysteem
+// Verificatiemodel voor Nieuwe Meersluis
 proctype NMS() {
     BTI_signals iir;  // input image register
     NMS_signals oir;  // output image register
@@ -291,6 +310,7 @@ proctype NMS() {
                 storing(sluistoestand);
                 vaarrichting(mijnrichting);
                 seinbeelden();
+                rkvl();
                 printf("\n");
             }
         }
@@ -341,7 +361,7 @@ proctype NMS() {
         }
         if
         :: count > 20000 -> {
-            printf("END \n")
+            printf("END \n");
             break; // voor testen, alleen 10000 plc cycles
         }
         :: else -> skip;
@@ -351,15 +371,142 @@ proctype NMS() {
 }
 
 
-// verificatiemodel voor SVS subsysteem
+// verificatiemodel voor Schinkelbruggenobject
+proctype Bruggen() {
+    BTI_signals oir;  // output image register
+    NMS_signals iir;  // input image register
+
+    int plc_step = 0; //omdat Promela een niet-deterministische taal is, moet de volgorde van de verwerking worden geforceerd
+    int count = 0;
+    int opdracht_count;
+    int opdracht_step;
+    int mijnrichting = GEEN_RICHTING;
+    int bruggentoestand = B_GESPERD;
+
+    // PLC Cyclus
+    do
+    :: true -> {
+        if
+        :: plc_step == 0 -> {
+            iir.SluisGeenDoorvaart =         nms_output.SluisGeenDoorvaart;
+            iir.SluisGereedVoorDoorvaartNZ = nms_output.SluisGereedVoorDoorvaartNZ;
+            iir.SluisGereedVoorDoorvaartZN = nms_output.SluisGereedVoorDoorvaartZN;
+            iir.SluisMeldstoring =           nms_output.SluisMeldstoring;
+
+        }
+        :: plc_step == 1 -> {
+            // Verwerking
+            if
+            :: bruggentoestand == B_GESPERD -> {
+                nb_svs = SPER
+                zb_svs = SPER
+                n_ovds = GEENDOORVAART;
+                z_ovds = GEENDOORVAART;
+                oir.BrugGeenDoorvaart = true;          
+                oir.BrugGereedVoorDoorvaartNZ = false;
+                oir.BrugGereedVoorDoorvaartZN = false;
+                oir.BrugGereedVoorOnderdoorvaart = false;
+                oir.BrugMeldstoring = false;
+                if // brug volgt de sluis
+                :: ! iir.SluisGeenDoorvaart && iir.SluisGereedVoorDoorvaartNZ -> {
+                    n_ovds = DOORVAART;
+                    oir.BrugGeenDoorvaart = false;          
+                    oir.BrugGereedVoorOnderdoorvaart = true;
+                }
+                :: ! iir.SluisGeenDoorvaart && iir.SluisGereedVoorDoorvaartZN -> {
+                    z_ovds = DOORVAART;
+                    oir.BrugGeenDoorvaart = false;          
+                    oir.BrugGereedVoorOnderdoorvaart = true;
+                }
+                :: else -> skip;
+                fi
+
+            }
+            :: bruggentoestand == B_GEEN_DOORVAART -> {
+                // bij geen doorvaat is de brug bediend
+                skip;
+            }
+            :: bruggentoestand == B_AANSTONDS_DOORVAART -> {
+                // Brug is in beweging en/of wacht op vrijghave door brugwachter
+                skip;
+            }
+            :: bruggentoestand == B_DOORVAART -> {
+                // De brug is gereed voor doorvaart, en alleen als sluis doorvaart
+                // toestaat zal de brug dat ook doen
+                skip;
+            }
+            :: bruggentoestand == B_STORING -> {
+                // Brug gaat is in storing
+                skip;
+            }
+            fi
+
+        }
+        :: plc_step == 2 -> {
+            bti_output.BrugGeenDoorvaart = oir.BrugGeenDoorvaart;          
+            bti_output.BrugGereedVoorDoorvaartNZ = oir.BrugGereedVoorDoorvaartNZ;
+            bti_output.BrugGereedVoorDoorvaartZN = oir.BrugGereedVoorDoorvaartZN;
+            bti_output.BrugGereedVoorOnderdoorvaart = oir.BrugGereedVoorOnderdoorvaart;
+            bti_output.BrugMeldstoring = oir.BrugMeldstoring;
+        }
+        :: plc_step == 3 -> {
+            if // Bepaal (random) of een of meer bruggen in storing gaat
+            :: true -> skip;
+            :: true -> bruggentoestand = B_STORING;
+            fi
+            d_step {
+                if
+                :: bruggentoestand != B_STORING -> {
+                    if
+                    :: opdracht_step == 0 -> bruggentoestand = B_GEEN_DOORVAART;
+                    :: opdracht_step == 1 -> {
+                        if // wissel van richting
+                        :: mijnrichting == NOORD_ZUID -> mijnrichting = ZUID_NOORD;
+                        :: mijnrichting == ZUID_NOORD -> mijnrichting = NOORD_ZUID;
+                        fi
+                    }
+                    :: opdracht_step == 2 -> bruggentoestand = B_AANSTONDS_DOORVAART;
+                    :: opdracht_step == 3 -> bruggentoestand = B_DOORVAART;
+                    :: opdracht_step == 4 -> bruggentoestand = S_GESPERD;
+                    fi
+                    opdracht_count++;
+                    opdracht_step = opdracht_count % 5;
+                }
+                :: else -> skip
+                fi
+            }
+            if // Bepaal (random) of sluis UIT storing gaat
+            :: bruggentoestand == B_STORING -> skip;
+            :: bruggentoestand == B_STORING -> {
+                opdracht_count = 0;
+                opdracht_step = opdracht_count % 7;
+                bruggentoestand = S_GESPERD;
+            }
+            :: else -> skip;
+            fi
+        }
+        fi
+
+        d_step {
+            count++;
+            plc_step = count % 4;
+        }
+        count++;
+        plc_step = count % 4;
+        if
+            :: count > 20000 -> {
+                printf("END \n");
+                break; // voor testen, alleen 10000 plc cycles
+            }
+            :: else -> skip;
+        fi
+    }
+    od
+}
+
+
 
 init {
-    atomic {
-        nms_output.SluisGeenDoorvaart = false;
-        nms_output.SluisGereedVoorDoorvaartNZ = false;
-        nms_output.SluisGereedVoorDoorvaartZN = false;
-        nms_output.SluisMeldstoring = false;
-    }
     run NMS();
-    // run SVS();
+    run Bruggen();
 }
